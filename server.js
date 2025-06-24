@@ -4,22 +4,23 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
-let clients = [];
+const clients = [];
 
 app.get("/mcp", (req, res) => {
-  res.set({
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive"
-  });
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
 
-  res.flushHeaders();
-  res.write("event: connected\ndata: MCP SSE ready\n\n");
+  res.write(`event: connected\ndata: MCP SSE ready\n\n`);
 
-  clients.push(res);
+  const client = res;
+  clients.push(client);
 
   req.on("close", () => {
-    clients = clients.filter(c => c !== res);
+    const index = clients.indexOf(client);
+    if (index !== -1) {
+      clients.splice(index, 1);
+    }
   });
 });
 
@@ -30,13 +31,14 @@ app.post("/mcp-message", (req, res) => {
     const { a, b } = params;
     const result = a + b;
 
-    const response = {
+    const message = {
       method,
       result
     };
 
-    const message = `data: ${JSON.stringify(response)}\n\n`;
-    clients.forEach(c => c.write(message));
+    clients.forEach(client => {
+      client.write(`data: ${JSON.stringify(message)}\n\n`);
+    });
 
     return res.json({ status: "ok" });
   }
@@ -45,5 +47,5 @@ app.post("/mcp-message", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`MCP server running on port ${port}`);
+  console.log(`MCP server running at http://localhost:${port}`);
 });
