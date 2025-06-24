@@ -1,6 +1,6 @@
 const express = require("express");
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -10,34 +10,40 @@ app.get("/mcp", (req, res) => {
   res.set({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
+    "Connection": "keep-alive"
   });
+
   res.flushHeaders();
+  res.write("event: connected\ndata: MCP SSE ready\n\n");
 
   clients.push(res);
 
   req.on("close", () => {
-    clients = clients.filter(client => client !== res);
+    clients = clients.filter(c => c !== res);
   });
 });
 
 app.post("/mcp-message", (req, res) => {
   const { method, params } = req.body;
 
-  let result;
   if (method === "tool.add") {
     const { a, b } = params;
-    result = a + b;
-  } else {
-    return res.status(400).json({ error: "Unknown method" });
+    const result = a + b;
+
+    const response = {
+      method,
+      result
+    };
+
+    const message = `data: ${JSON.stringify(response)}\n\n`;
+    clients.forEach(c => c.write(message));
+
+    return res.json({ status: "ok" });
   }
 
-  const message = `data: ${JSON.stringify({ result })}\n\n`;
-  clients.forEach(client => client.write(message));
-
-  res.json({ success: true });
+  return res.status(400).json({ error: "Unknown method" });
 });
 
 app.listen(port, () => {
-  console.log(`MCP server with SSE running at http://localhost:${port}`);
+  console.log(`MCP server running on port ${port}`);
 });
