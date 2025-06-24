@@ -35,6 +35,7 @@ app.get("/mcp", (req, res) => {
   clients.set(clientId, res);
 
   console.log(`[SSE] Client connected: ${clientId}`);
+  console.log(req.body);
   res.write(`event: connected\ndata: MCP SSE ready\n\n`);
 
   req.on("close", () => {
