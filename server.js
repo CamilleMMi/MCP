@@ -9,6 +9,7 @@ app.use(express.json());
 let clients = [];
 
 app.get("/mcp", (req, res) => {
+  console.log("🔌 New SSE client connected");
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -17,12 +18,14 @@ app.get("/mcp", (req, res) => {
   clients.push(res);
 
   req.on("close", () => {
+    console.log("SSE client disconnected");
     clients = clients.filter(c => c !== res);
   });
 });
 
 app.post("/mcp-message", (req, res) => {
   const { method, params } = req.body;
+  console.log("📩 Message received:", method, params);
 
   let result;
 
@@ -42,12 +45,13 @@ app.post("/mcp-message", (req, res) => {
     result = { error: "Unknown method" };
   }
 
-  const message = `data: ${JSON.stringify(result)}\n\n`;
-  clients.forEach(client => client.write(message));
+  const payload = `data: ${JSON.stringify(result)}\n\n`;
+  clients.forEach(client => client.write(payload));
+  console.log("Sent to all clients:", result);
 
   res.json({ status: "ok" });
 });
 
 app.listen(port, () => {
-  console.log(`✅ MCP SSE server running at http://localhost:${port}`);
+  console.log(`MCP server running on port ${port}`);
 });
