@@ -6,38 +6,48 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-const tools = {
-  "tool.add": {
-    name: "Addition Tool",
-    description: "Adds two numbers.",
-    params: ["a", "b"],
-  },
-  "tool.hello": {
-    name: "Hello Tool",
-    description: "Returns Hello World.",
-    params: [],
-  },
-};
+let clients = [];
 
-app.post("/mcp", (req, res) => {
+app.get("/mcp", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  res.write(`event: connected\ndata: MCP SSE ready\n\n`);
+  clients.push(res);
+
+  req.on("close", () => {
+    clients = clients.filter(c => c !== res);
+  });
+});
+
+app.post("/mcp-message", (req, res) => {
   const { method, params } = req.body;
 
-  if (method === "listTools") {
-    return res.json({ result: tools });
-  }
+  let result;
 
   if (method === "tool.add") {
     const { a, b } = params;
-    return res.json({ result: Number(a) + Number(b) });
+    result = { result: a + b };
+  } else if (method === "tool.hello") {
+    result = { result: "Hello World" };
+  } else if (method === "listTools") {
+    result = {
+      result: [
+        { name: "tool.add", description: "Additionne deux nombres." },
+        { name: "tool.hello", description: "Renvoie Hello World." }
+      ]
+    };
+  } else {
+    result = { error: "Unknown method" };
   }
 
-  if (method === "tool.hello") {
-    return res.json({ result: "Hello World" });
-  }
+  const message = `data: ${JSON.stringify(result)}\n\n`;
+  clients.forEach(client => client.write(message));
 
-  return res.status(400).json({ error: "Unknown method" });
+  res.json({ status: "ok" });
 });
 
 app.listen(port, () => {
-  console.log(`MCP server running at http://localhost:${port}`);
+  console.log(`✅ MCP SSE server running at http://localhost:${port}`);
 });
