@@ -1,57 +1,91 @@
 const express = require("express");
 const cors = require("cors");
+const { randomUUID } = require("crypto");
+
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
 
-let clients = [];
+const clients = new Map();
+
+const tools = {
+  add: {
+    description: "Add two numbers",
+    parameters: { a: "number", b: "number" },
+    handler: ({ a, b }) => ({ result: a + b }),
+  },
+  hello: {
+    description: "Say hello",
+    parameters: {},
+    handler: () => ({ result: "Hello World" }),
+  },
+};
 
 app.get("/mcp", (req, res) => {
-  console.log("🔌 New SSE client connected");
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+  res.flushHeaders();
 
+  const clientId = randomUUID();
+  clients.set(clientId, res);
+
+  console.log(`[SSE] Client connected: ${clientId}`);
   res.write(`event: connected\ndata: MCP SSE ready\n\n`);
-  clients.push(res);
 
   req.on("close", () => {
-    console.log("SSE client disconnected");
-    clients = clients.filter(c => c !== res);
+    clients.delete(clientId);
+    console.log(`[SSE] Client disconnected: ${clientId}`);
   });
 });
 
 app.post("/mcp-message", (req, res) => {
   const { method, params } = req.body;
-  console.log("📩 Message received:", method, params);
 
-  let result;
+  console.log(`[POST] Received message: ${JSON.stringify(req.body)}`);
 
   if (method === "tool.add") {
-    const { a, b } = params;
-    result = { result: a + b };
-  } else if (method === "tool.hello") {
-    result = { result: "Hello World" };
-  } else if (method === "listTools") {
-    result = {
-      result: [
-        { name: "tool.add", description: "Additionne deux nombres." },
-        { name: "tool.hello", description: "Renvoie Hello World." }
-      ]
-    };
-  } else {
-    result = { error: "Unknown method" };
+    const result = tools.add.handler(params);
+    broadcast({ type: "result", method, result });
+    return res.json({ status: "ok" });
   }
 
-  const payload = `data: ${JSON.stringify(result)}\n\n`;
-  clients.forEach(client => client.write(payload));
-  console.log("Sent to all clients:", result);
+  if (method === "tool.hello") {
+    const result = tools.hello.handler();
+    broadcast({ type: "result", method, result });
+    return res.json({ status: "ok" });
+  }
 
-  res.json({ status: "ok" });
+  if (method === "listTools") {
+    const result = Object.keys(tools).map((name) => ({
+      name,
+      description: tools[name].description,
+      parameters: tools[name].parameters,
+    }));
+    broadcast({ type: "result", method, result });
+    return res.json({ status: "ok" });
+  }
+
+  return res.status(400).json({ error: "Unknown method" });
 });
 
+function broadcast(message) {
+  const data = `data: ${JSON.stringify(message)}\n\n`;
+  for (const [id, res] of clients.entries()) {
+    try {
+      res.write(data);
+      console.log(`[SSE] Sent to ${id}: ${data}`);
+    } catch (e) {
+      console.error(`[SSE] Error sending to ${id}: ${e.message}`);
+      clients.delete(id);
+    }
+  }
+}
+
 app.listen(port, () => {
-  console.log(`MCP server running on port ${port}`);
+  console.log(`MCP SSE server running on port ${port}`);
 });
