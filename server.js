@@ -1,46 +1,38 @@
 const express = require("express");
+const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000;
 
+app.use(cors());
 app.use(express.json());
 
-const clients = [];
+const tools = {
+  "tool.add": {
+    name: "Addition Tool",
+    description: "Adds two numbers.",
+    params: ["a", "b"],
+  },
+  "tool.hello": {
+    name: "Hello Tool",
+    description: "Returns Hello World.",
+    params: [],
+  },
+};
 
-app.get("/mcp", (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-
-  res.write(`event: connected\ndata: MCP SSE ready\n\n`);
-
-  const client = res;
-  clients.push(client);
-
-  req.on("close", () => {
-    const index = clients.indexOf(client);
-    if (index !== -1) {
-      clients.splice(index, 1);
-    }
-  });
-});
-
-app.post("/mcp-message", (req, res) => {
+app.post("/mcp", (req, res) => {
   const { method, params } = req.body;
+
+  if (method === "listTools") {
+    return res.json({ result: tools });
+  }
 
   if (method === "tool.add") {
     const { a, b } = params;
-    const result = a + b;
+    return res.json({ result: Number(a) + Number(b) });
+  }
 
-    const message = {
-      method,
-      result
-    };
-
-    clients.forEach(client => {
-      client.write(`data: ${JSON.stringify(message)}\n\n`);
-    });
-
-    return res.json({ status: "ok" });
+  if (method === "tool.hello") {
+    return res.json({ result: "Hello World" });
   }
 
   return res.status(400).json({ error: "Unknown method" });
