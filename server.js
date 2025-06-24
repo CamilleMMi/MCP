@@ -4,33 +4,38 @@ const port = 3000;
 
 app.use(express.json());
 
-app.post("/mcp", (req, res) => {
-  const { method, params } = req.body;
+let clients = [];
 
-  if (method === "tool.add") {
-    const { a, b } = params;
-    return res.json({ result: a + b });
-  }
-
-  return res.status(400).json({ error: "Unknown method" });
-});
-
-app.get("/events", (req, res) => {
+app.get("/mcp", (req, res) => {
   res.set({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
-    Connection: "keep-alive",
+    "Connection": "keep-alive",
   });
   res.flushHeaders();
 
-  const intervalId = setInterval(() => {
-    const data = JSON.stringify({ message: "heartbeat", timestamp: new Date() });
-    res.write(`data: ${data}\n\n`);
-  }, 5000);
+  clients.push(res);
 
   req.on("close", () => {
-    clearInterval(intervalId);
+    clients = clients.filter(client => client !== res);
   });
+});
+
+app.post("/mcp-message", (req, res) => {
+  const { method, params } = req.body;
+
+  let result;
+  if (method === "tool.add") {
+    const { a, b } = params;
+    result = a + b;
+  } else {
+    return res.status(400).json({ error: "Unknown method" });
+  }
+
+  const message = `data: ${JSON.stringify({ result })}\n\n`;
+  clients.forEach(client => client.write(message));
+
+  res.json({ success: true });
 });
 
 app.listen(port, () => {
